@@ -1,0 +1,178 @@
+# FAQ
+
+Answers to questions about how this project's workflow operates.
+
+This FAQ fills as Throughliner's features are announced: when a change ships
+and its announcement is posted, the matching entry is written here in the same
+move. A young FAQ is therefore short — that means little has been announced
+yet, not that there is nothing to ask. Until the entry you need exists, just
+ask in chat: Claude answers workflow questions in plain words, and the README
+covers what the plugin does.
+
+## How do I install Throughliner?
+
+Two routes, depending on where you're starting.
+
+If you already have Claude Code, open a chat in it and ask, in plain English,
+for the marketplace `FlintcraftTech/throughliner#beta` to be added and the
+`throughliner@flintcraft` plugin installed from it. The `#beta` on the end is
+the tested weekly pick; the plugin's main line carries day-to-day development
+and can change under you mid-week. Claude Code runs both
+commands for you — you never type in a terminal. Then **fully quit** the app
+and reopen it, so the plugin loads. On Windows, "fully quit" means checking the
+process has actually exited, because a normal close can leave it running.
+
+If you're new to Claude Code, or not sure, open a fresh chat at claude.ai in
+your browser and ask Claude to read the install guide at
+`https://github.com/FlintcraftTech/throughliner/raw/main/INSTALL.md` and walk
+you through it one step at a time. That guide covers installing Claude Code,
+setting up a paid plan, installing the plugin, and a quick test that it worked.
+No terminal experience is needed.
+
+You do need a paid Claude plan — Pro is enough. Claude Code does not run on the
+free tier.
+
+## What happens in my first session?
+
+Open your project folder in Claude Code and run `/setup`. Claude interviews you
+about what you're building and creates your project's documents: your spec,
+your queue, your session log and this FAQ.
+
+Don't overthink the answers. Plain language is fine and nothing is locked in —
+your next step is a `/plan` session where you organise the work, so anything
+you miss gets sorted there.
+
+The interview asks what you're building and who for, whether to keep Claude's
+replies short and decision-led, whether the repository is public or private
+(and if public, about a licence), and whether to keep your planning documents
+out of version control — those documents hold your reasoning, which is worth
+keeping private if the repository isn't.
+
+**If your project has several distinct parts**, start with one project in the
+parent folder. When a part outgrows that queue, open its subfolder and run
+`/setup` there: Throughliner notices it's inside an existing project, reads the
+parent's spec, and asks which part this folder covers. The subfolder becomes a
+full project of its own. That's called a **pop-out**, and it's deliberately
+one-way — there's no scripted route back in. You don't need to decide any of
+this upfront.
+
+**After a plugin update**, running `/setup` again on an older project migrates
+its documents to the current format rather than replacing them.
+
+## What actually happens in a `/plan` session?
+
+You talk. Describe what you want, raise ideas, answer Claude's questions. Claude
+does the organising — checking your queue for contradictions, asking the design
+questions a build would otherwise have to guess at, and filing everything. You
+can interrupt at any point to raise something new. There's no wrong order.
+
+Your queue has two sections. **Unprocessed** is where new ideas land, as
+**captures** — rough is fine, just enough to remember what you meant. A capture
+can come from you at any moment in any chat, from Claude noticing something
+mid-build, or from `/rescan` sweeping up what was said but never filed.
+
+**Processed** is work you and Claude have agreed on, and inside it a readiness
+line separates work that's ready to build from work that's still waiting on
+something. The part above that line is cleared to run, and it's what `/next`
+builds from. Work sits below the line for one of two reasons, written on the
+item itself: another named piece of work has to ship first, or a date hasn't
+passed yet.
+
+A `/plan` run opens by checking the queue for problems — work marked ready that
+contradicts its own notes, items that name no files to change, work waiting on
+itself in a loop — and reports what it finds. Then it asks one question: is
+there anything you want to prioritise, or should Claude pick the order?
+
+You don't have to process everything in one sitting. `/plan`, `/done`, fresh
+chat, `/plan` again is a normal rhythm.
+
+## What does `/next` do?
+
+It builds the ready work. Claude takes the top item, reads what it's meant to
+change and which files it touches, and builds it — locked to those files, and
+never adding one without asking you first.
+
+If several items are ready, `/next` builds them back to back without asking you
+to confirm each one. It's not a run that finishes on its own, though: it stops
+to walk you through anything that's yours to do, it halts on work marked as
+needing a session of its own, and it never closes itself.
+
+Work can carry a tag saying how it runs:
+
+- **`[audit]`** — Claude reads and reports without editing anything. What it
+  finds becomes captures in your queue for a later `/plan`.
+- **`[user]`** — work Claude genuinely can't do, like a check that needs your
+  eyes. Claude walks you through it live, one step at a time, after all the
+  building is finished.
+- **`[freeform]`** — work `/next` must not run, because it's large or because
+  it can't safely run inside a build. `/next` stops when it reaches one rather
+  than skipping past it.
+
+**If you ask for something mid-build that isn't part of the current job**,
+Claude files it as a capture and says why in one clause, rather than quietly
+widening the job. Ask a second time and a small change goes straight through.
+
+## Why does every session end with `/done`, and why start a fresh chat?
+
+`/done` records what happened in your session log — what was decided, what was
+built, what's still open — and commits. Until it runs, the work may exist in
+your files but the reasoning behind it isn't on the record anywhere. So finish
+every session with it.
+
+Then start a fresh chat, either with `/clear` or a new conversation. This isn't
+tidiness. Every message in a conversation takes up room in Claude's context
+window, and a long session fills it; once it's full, earlier details start
+slipping — instructions get fuzzy, scope drifts, mistakes creep in. A fresh
+chat gives the next session the whole window. It doesn't lose anything, because
+the next session learns what happened from your log and what's planned from
+your queue.
+
+The order matters: **`/done` before `/clear`, always.** Clear first and the
+session's thinking is gone before it was written down.
+
+`/done` also tells you what the next work is and then stops. It won't invite you
+into another build in the same chat.
+
+## What is `/rescan` for?
+
+It reads back over the conversation — what you said, what Claude thought while
+working — and files anything that never made it into a file. A shortened
+version runs inside `/done` as a safety net, but you can run `/rescan` yourself
+at any moment.
+
+The reason to run it mid-session is that `/done` is too late for some things.
+If you've been freewheeling in a `/plan` session, running `/rescan` sweeps what
+was said into captures right then — so they can be processed in that same
+session and be cleared to run in time for your very next `/next`.
+
+It also reads Claude's own working-out, not just your messages, so ideas that
+came up while Claude was actually working with your project get filed rather
+than lost.
+
+What it finds is routed by where it belongs: work still to do becomes a
+capture, while something that already *happened* is added to this session's
+record as a marked tail. That second half is what makes `/rescan` the one-word
+way to record work you did after the close.
+
+Two limits worth knowing. It reaches only as far back as Claude can still see
+in the conversation. And it stops at the last `/rescan` in that chat, so
+running it twice doesn't comb the same ground again.
+
+## Does `/plan` know what happened in my other sessions?
+
+Yes. When you run `/plan`, Claude opens by reading your session history — not
+all of it, just everything recorded since the last time you sat down to plan.
+
+It isn't a summary, and it won't recite your history back at you. What it does
+is check for an overlap: did something built last week name a file, or a piece
+of work, that's about to come up today? If yes, you hear about it before you
+start deciding.
+
+You get one line either way — including when nothing overlaps. That's
+deliberate: a check that only speaks when it finds something is impossible to
+tell apart from a check that never ran.
+
+The window comes from your own records rather than a fixed number of sessions,
+so it stretches to cover however long it has been. It matters most if you plan
+every week or two and build in between: all that building lands in the record,
+and the next planning session walks in having read it.

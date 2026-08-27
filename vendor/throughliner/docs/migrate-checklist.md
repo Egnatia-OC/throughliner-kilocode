@@ -1,0 +1,212 @@
+---
+name: migrate-checklist
+docset: current
+note: >
+  Loaded on demand when a project's QUEUE.md is in an old format and needs
+  converting to the two-section model. A guided manual pass in an ordinary
+  session, usually during /setup.
+---
+
+# QUEUE.md migration checklist — old format → two-section
+
+**This doc carries no response-shape tags** (the bracketed `[BRIEF]`-style
+markers other procedure docs use); the prose in each step carries the behaviour
+directly instead. **It stays tag-free**, for setup.md's reason: it runs during
+/setup, where the rules defining those tags may not be loaded.
+
+No new skill and no hook change: this is a guided manual pass, working item by
+item, drafting the converted queue and **getting the user's approval before
+writing, because a project being migrated may have been adopted moments ago and
+may not be a committed git repo — so there may be nothing to recover.**
+
+**When this applies.** A project's `QUEUE.md` format is the one project doc that
+reliably falls behind as the method evolves. LOG is already per-entry + index,
+CLAUDE.md is topped up by session_start, and SPEC is format-agnostic — so they need
+little or nothing.
+
+```
+recorded epoch below FORMAT_EPOCH  ->  convert with this checklist, running
+                                       every epoch section from the recorded
+                                       number upward
+```
+
+The oldest shape this reaches is the multi-section queue —
+`## Red flags · ## Batches · ### Parked · ## Deferred tests · ## Captures` — but
+which conversions run is decided by the recorded epoch, not by what the file
+looks like.
+
+**Plain-language guard.** A consumer reads whatever you say while migrating. Say
+"your queue" not "QUEUE.md's parse structure"; "the ready-to-build line" not "the
+cleared-to-run marker". **The structural terms below are for you to read, not to
+narrate.**
+
+## How to run it
+
+**Run every epoch section from the project's recorded epoch up to the current
+`FORMAT_EPOCH`, in order.** /setup reads the recorded number from
+`.throughliner-format-epoch` and enters here; a project with no marker predates
+it and starts at the beginning. Each section says which epoch it brings the
+project to, so a project already past one skips it.
+
+```
+1. read the existing QUEUE.md; identify each old section and item
+2. convert each item per the rules of each epoch section you are running
+3. DRAFT the whole converted queue and show it for approval before writing
+   # not a contradiction of write-first: see "Why this shows before it writes"
+4. after writing, the post_tool_use lint confirms the new queue is well-formed
+5. /setup writes the new epoch marker LAST, once the conversions have landed
+```
+
+## Epochs 1–3 — the two-section queue
+
+Everything from here to "Preserve everything real" brings a project up to
+**epoch 3**. Run it where the recorded epoch is below 3; a project already at 3
+or above has a two-section queue and starts at Epoch 4 below.
+
+### The target shape
+
+The old sections all collapse into **two**: `## Processed` and `## Unprocessed`.
+
+```
+each work item becomes:
+    a #### heading                 its one-line description
+    a [slug] at the END of it      kebab-case, for LOG traceability
+    rationale prose beneath
+    an optional user-credit        "captured by you" — ONLY when the user
+                                   personally raised it. Otherwise unmarked:
+                                   AI is the default author, no AI label written.
+    a red-flag marker              only if it carries a security/privacy risk:
+                                   Red flag · State: cleared | uncleared
+```
+
+```
+which section:
+    Processed    vetted, agreed and ready (or designed and buildable).
+                 Within it, --- Cleared to run above this line --- separates
+                 greenlit-to-build (above) from not-yet-cleared (below).
+    Unprocessed  captured but not yet fully processed (still needs thought).
+```
+
+The current header prose for each section is shipped in setup.md's scaffold —
+**re-copy it rather than writing your own** (rule 3).
+
+### The judgment rules a find-and-replace can't make
+
+**1. Old red flags.**
+
+```
+work remains   ->  a work item carrying the Red flag · State: marker
+it's done      ->  moves to LOG history
+never          ->  left as a bare markerless line
+```
+
+**2. Old batch / parked / deferred-test items** → work items with a slug (and a
+`captured by you` credit only where the user clearly raised it), placed **by
+judgment**:
+
+```
+vetted and ready                      ->  Processed
+still needs thought                   ->  Unprocessed
+a deferred test ONLY THE USER can run ->  a [user] item with a described
+                                          walkthrough
+```
+
+**3. Method-shipped boilerplate is refreshed by re-copy rather than regenerated
+from guesses.** FAQ files, the QUEUE.md header prose, CLAUDE-TEMPLATE scaffolding — copy
+the *current shipped template* over the stale file rather than rewriting it from
+the method docs.
+
+```
+per-file discriminator:
+    the user's own work   ->  migrate by judgment
+    method boilerplate    ->  re-copy the template
+```
+
+**4. Approval before write.** Draft, show, get the okay, then write.
+
+**5. Drop empty section placeholders.** An empty old Red-flags / Deferred-tests /
+Parked block just disappears — nothing carries over.
+
+## Epoch 4 — cleared work says what it changes
+
+**Every item cleared to run says what changes, in which files, and what would
+show it landed.** A run reads each cleared item whole from QUEUE.md, so an item
+that says none of that reaches the run with nothing to build from and halts it
+as underspecified.
+
+**Nothing is reformatted, and no delimiter is required.** An earlier version of
+this epoch asked for a `--- Build block ---` region, because a run then read a
+generated view assembled from those regions. That view is retired
+(2026-08-27) and the run reads the item's own text — so **an existing project's
+build blocks need no conversion at all**: they read as part of the item, exactly
+as prose does.
+
+```
+a cleared item's own prose already    ->  nothing to do. It already says it.
+  says what changes and where
+a cleared item that does NOT say      ->  it never passed the decision step. Move
+  what changes inside its files           it below the readiness line and
+                                          process it at the next /plan, rather
+                                          than inventing instructions for it.
+an item carrying an old delimited     ->  leave it. It reads as ordinary text
+  build block                             now; rewriting it would be editing a
+                                          record to match later vocabulary.
+a held item, or a capture             ->  nothing. Neither is built until it is
+                                          cleared.
+a `[user]` or `[freeform]` item       ->  nothing. One is walked through, the
+                                          other halts a run by design.
+```
+
+**Write the blocks with the user, not for them.** Telling instruction from
+decision history is a judgment, which is the whole reason the split is authored
+at the decision step rather than computed by a script. A migration doing it silently
+would make exactly the call the design reserves for a moment the user is present.
+
+**Record a refusal where one was made.** A recorded "X was rejected because Y"
+belongs in the item, because a build that cannot see why an option was rejected
+proposes it again and stops to ask.
+
+**Nothing is deleted.** An item's rationale stays inline and whole — that is
+what the throughline requires.
+
+**Check it landed:** run the queue digest and read each cleared item's line.
+Every cleared build or `[audit]` item should be one you can say, from its own
+text, which files it changes and what changes inside them. Any you cannot goes
+below the readiness line.
+
+Cleared `[user]` and `[freeform]` items are counted separately, on the same
+line, as items that need no block — neither is built from one.
+
+## Section preambles — run this at every epoch
+
+**Quote a plain-prose section preamble.** Where the paragraph directly under
+`## Processed` or `## Unprocessed` is ordinary prose, prefix each of its lines
+with `> `. The wording is left exactly as it is.
+
+The lint reads un-quoted, un-headed prose inside a section as an orphaned
+rationale and warns that a heading may have been overwritten — and a preamble
+legitimately has no heading.
+
+```
+already a blockquote  ->  nothing to do
+plain prose           ->  quote it, wording untouched
+no preamble at all    ->  nothing to do
+```
+
+**Check it landed:** the lint reports no "prose belongs to no entry" warning for
+either section heading.
+
+## Preserve everything real
+
+**Migration must lose no content the user wants kept.**
+
+```
+each item's full rationale prose  ->  carried across verbatim (re-authored only
+                                      to fit the new shape, NEVER truncated)
+an old "captured by you" signal   ->  kept
+an old "by Claude" label          ->  just drops (AI is the default now)
+any red-flag risk                 ->  kept as a marked work item
+```
+
+**When unsure whether something is the user's own work or method boilerplate,
+ask** rather than guessing and overwriting.

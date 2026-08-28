@@ -26,7 +26,7 @@
 
 ## 1. Harness overview + exact version installed
 
-- **Installed:** VS Code extension `kilocode.kilo-code-7.4.23-linux-x64` at `/home/oc/.vscode/extensions/kilocode.kilo-code-7.4.23-linux-x64/` (VS Code 1.135.0). The CLI's `--version` string probe was still pending at writing time; the extension directory pins the bundled binary to 7.4.23 and its log banner reads `opencode` (it is an opencode fork).
+- **Installed:** the VS Code extension `kilocode.kilo-code-<version>-<platform>` (7.4.23 tested). The extension directory pins the bundled binary's version and its log banner reads `opencode` (it is an opencode fork).
 - **Architecture (verified):** the extension is a thin Solid.js webview shell. The actual agent is the bundled standalone Bun-compiled binary `bin/kilo` (175,491,200 bytes). The extension delegates all agent work to the CLI — orchestration, MCP, tool execution, search, session storage, permissions, custom commands, skills (extension `docs/opencode-migration-plan.md`; Kilo's own whats-new docs: the extension is "rebuilt" on the portable CLI core). **Consequence for smoke: the CLI *is* the runtime. Headless `kilo run` exercises exactly the code paths a VS Code session would; no VS Code/Xvfb needed.**
 - **Upstream fork:** `github.com/Kilo-Org/kilocode` (agent core = `packages/opencode`, an opencode fork). Plugin SDK: `@kilocode/plugin` (this machine pins 7.2.22 in `~/.kilocode/package.json` and `~/.config/kilo/package.json`); Kilo docs: plugin behavior is "identical to OpenCode".
 - **Hook surface present in the 7.4.23 binary** (string-occurrence probe on `bin/kilo`, run by Main):
@@ -160,7 +160,7 @@ Loading (fork `src/config/plugin.ts`, `src/plugin/index.ts`):
 
 ### 4.1 Plugin API — from the installed `@opencode-ai/plugin` types
 
-File: `/home/oc/.config/opencode/node_modules/@opencode-ai/plugin/dist/index.d.ts` (Kilo's `@kilocode/plugin` 7.2.22 has the identical shape per Kilo docs; Kilo's own plugin loader reads `PluginModule.server` or a legacy named export — fork `src/plugin/index.ts`).
+File: the installed `@opencode-ai/plugin` types (`node_modules/@opencode-ai/plugin/dist/index.d.ts` of the opencode SDK install; Kilo's `@kilocode/plugin` has the identical shape per Kilo docs — Kilo's own plugin loader reads `PluginModule.server` or a legacy named export, fork `src/plugin/index.ts`).
 
 ```ts
 export type PluginInput = {
@@ -208,7 +208,7 @@ Consequences (verified in `src/plugin/index.ts`): `trigger` = `Effect.promise(as
 
 ### 4.3 Bus events — from the installed `@opencode-ai/sdk` types
 
-File: `/home/oc/.config/opencode/node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts` (verbatim):
+File: the installed `@opencode-ai/sdk` types (`node_modules/@opencode-ai/sdk/dist/gen/types.gen.d.ts`; verbatim):
 
 ```ts
 export type EventSessionIdle = { type: "session.idle"; properties: { sessionID: string; } };
@@ -300,15 +300,15 @@ Skill frontmatter (validated): `name` (string, required), `description` (string,
 
 ## 6. Smoke-test plan
 
-**Vehicle:** the bundled CLI — `E=/home/oc/.vscode/extensions/kilocode.kilo-code-7.4.23-linux-x64/bin/kilo` (the extension's own runtime; §1). **Model:** the machine's existing `mercury` provider (global `~/.config/kilo/kilo.jsonc`; local llama.cpp, no API key — §7). No VS Code needed.
+**Vehicle:** the bundled CLI — `E=<extension-dir>/bin/kilo` (the extension's own runtime; §1) or any installed `kilo` on PATH. **Model:** whatever the machine's Kilo config already defines (global `~/.config/kilo/kilo.jsonc`); the port is model-agnostic (§7). No VS Code needed.
 
 **Phase 0 — fixture (fast, no model):**
 ```bash
-E=/home/oc/.vscode/extensions/kilocode.kilo-code-7.4.23-linux-x64/bin/kilo
-P=/home/oc/reports/throughliner-kilocode          # the port repo
+E=<abs-path-to-kilo-binary>
+P=<abs-path-to-this-repo>
 F=/tmp/kl-thru
 rm -rf $F && mkdir -p $F && cd $F && git init -q
-cp -r $P/.kilo $P/vendor $P/kilo.jsonc $F/       # the exact files a user installs (project-level install)
+cp -r $P/kilo $P/vendor $F/ && cp $P/example/kilo.jsonc $F/   # the port tree + the example project config
 ```
 Smoke-only `kilo.jsonc` additions (shipped file may omit the skill map): `{"permission":{"task":"ask","skill":{"setup":"ask","plan":"ask","next":"ask","rescan":"ask","done":"ask"}},"experimental":{"openTelemetry":false}}`.
 
@@ -345,28 +345,40 @@ $E run --dir $F --auto "Reply with exactly: MARKER-THRU-7788"    # marker in rep
 
 ---
 
-## 7. Model/provider config — THIS machine (initial testing only; never shipped)
+## 7. Model/provider config (portable — no machine values)
 
-- **Already configured — nothing to install:** global `~/.config/kilo/kilo.jsonc` defines provider `mercury` = `@ai-sdk/openai-compatible`, `baseURL: "http://192.168.1.117:8082/v1"`, model id `/models/Qwen3.8-27B-UD-Q4_K_M.gguf` (reasoning + tool_call), default `model: "mercury//models/Qwen3.8-27B-UD-Q4_K_M.gguf"`. Local llama.cpp — **no API key**.
-- **Discrepancy note:** the batch context said port **8083**; this machine's config uses **8082** (both reportedly serve the same model on 192.168.1.117). Use the configured 8082; if the endpoint is down at smoke time, confirm which port is live and adjust the machine config only.
-- Smoke needs no model config changes; optional explicit `-m mercury//models/Qwen3.8-27B-UD-Q4_K_M.gguf` per run. The machine's `small_model` (cloud glm) is irrelevant to the port.
+- **Nothing to install:** the port uses whatever provider/model Kilo is already
+  configured with (global `~/.config/kilo/kilo.jsonc` or project config). Any
+  OpenAI-compatible endpoint works (local llama.cpp, router, cloud); for a
+  keyless local endpoint, the provider block needs no `apiKey`.
+- **Verify the endpoint before budgeting model time:** `curl -s <baseURL>/models`.
+- Optional explicit per-run override: `kilo run -m <provider>/<model>`.
 - **The port ships zero model configuration** — see §8.
 
 ---
 
 ## 8. Universal install contract (what a stranger on any machine with any configured model needs)
 
-- **Requirements:** Kilo CLI 7.x (7.4.23 tested) — via the VS Code extension or `npm i -g @kilocode/cli`; **Python 3** (stdlib only, for the vendored hooks); **git**; **any** configured Kilo provider/model (the port never specifies or requires one — Throughliner is a workflow layer, never a model choice; `kilo run -m <provider>/<model>` stays the user's). No network needed at install (no plugin npm deps); no secrets in the shipped tree (no keys, hostnames, or user paths — the §7 values are this machine's test config only).
-- **Install (project-level — recommended; zero-config plugin auto-registration):**
+- **Requirements:** Kilo CLI 7.x (7.4.23 tested) — via the VS Code extension or `npm i -g @kilocode/cli`; **Python 3** (stdlib only, for the vendored hooks); **git**; **any** configured Kilo provider/model (the port never specifies or requires one — Throughliner is a workflow layer, never a model choice; `kilo run -m <provider>/<model>` stays the user's). No network needed at install (no plugin npm deps); no secrets in the shipped tree (no keys, hostnames, or user paths).
+- **Install (clone + project config — the shipped contract):**
   ```bash
-  git clone <port-repo-url> /tmp/tl-kilo
-  cd <your-project>
-  cp -r /tmp/tl-kilo/.kilo /tmp/tl-kilo/vendor .
-  # optional: merge /tmp/tl-kilo/kilo.jsonc into your project kilo.jsonc (permission lines)
+  git clone <port-repo-url> <anywhere>
+  # at the project root, create/merge kilo.jsonc from the repo's example/kilo.jsonc:
+  {
+    "plugin": ["<abs-path-to-repo>/kilo/plugin.ts"],
+    "permission": {
+      "task": "ask",
+      "skill": { "setup": "ask", "plan": "ask", "next": "ask", "rescan": "ask", "done": "ask" }
+    }
+  }
   ```
-  Skills land in `<your-project>/.kilo/skills/` (auto-discovered, untrusted — fine, no `!`cmd`` used), the shim in `<your-project>/.kilo/plugin/throughliner.ts` (auto-registered, no config entry), the pristine method in `<your-project>/vendor/throughliner/`. The shim resolves the vendor dir relative to its own location (`../../vendor/throughliner` from `.kilo/plugin/`), overridable via the `plugin` config option form `["file://.../throughliner.ts", { "vendor": "<abs-path>" }]`.
-- **Install (global, all projects):** copy the port into `~/.kilo/throughliner/`, skills into `~/.kilo/skills/`, shim to `~/.config/kilo/plugin/throughliner.ts`, and pass `{ "vendor": "~/.kilo/throughliner" }` via the global `plugin` array. (Project-level is still recommended — §5.16.)
-- **Uninstall:** delete the copied files (`rm -rf .kilo/skills/{setup,plan,next,rescan,done} .kilo/plugin/throughliner.ts vendor/throughliner`).
+  The `plugin` line loads the shim (absolute paths, config-relative paths, and
+  `file://` URLs all work); the `permission` block is the native gate for the two
+  "ask" behaviors. On load the plugin materializes the five method skills into
+  `~/.kilocode/skills/<name>/SKILL.md` (idempotent) and verifies the vendored tree
+  next to `plugin.ts`.
+- **Uninstall:** remove the `plugin`/`permission` lines from the project config and
+  delete `~/.kilocode/skills/{setup,plan,next,rescan,done}`.
 - **Version floor:** the hook surface used (`tool.execute.before/after`, `event`, `experimental.chat.system.transform`, `skill` tool + skill→command auto-registration, `permission` config) is present in the 7.4.23 binary; `@kilocode/plugin` is API-stable across 7.x. If a future 7.x removes a hook, the shim's fail-open wrapper degrades to skills-only (hooks silently no-op) — an acceptable, documented failure mode.
 - **Update policy:** snapshot-and-re-derive from the pinned upstream SHA (`tools/vendor.sh` re-vendors; manifest re-verifies) — per `PROVENANCE.md`.
 
@@ -374,9 +386,9 @@ $E run --dir $F --auto "Reply with exactly: MARKER-THRU-7788"    # marker in rep
 
 ## 9. Sources
 
-- Local install: `/home/oc/.vscode/extensions/kilocode.kilo-code-7.4.23-linux-x64/` (`bin/kilo` string probes by Main; `dist/extension.js`; `docs/opencode-migration-plan.md`); installed SDK types `/home/oc/.config/opencode/node_modules/@opencode-ai/plugin/dist/index.d.ts` and `.../@opencode-ai/sdk/dist/gen/types.gen.d.ts`; live config `~/.config/kilo/kilo.jsonc`, `~/.kilocode/package.json`, `~/.config/kilo/package.json`; `kilo run --help` + `kilo agent list` outputs (Main probes).
+- Local install: the Kilo Code VS Code extension (bundled `bin/kilo` string probes; `dist/extension.js`; `docs/opencode-migration-plan.md`); installed SDK types under the opencode SDK's `node_modules` (`@opencode-ai/plugin/dist/index.d.ts`, `@opencode-ai/sdk/dist/gen/types.gen.d.ts`); `kilo run --help` + `kilo agent list` outputs.
 - Kilo fork source (main branch): `packages/opencode/src/{session/tools.ts, plugin/index.ts, permission/index.ts, command/index.ts, skill/index.ts, tool/skill.ts, config/{paths,config,command,plugin}.ts, kilocode/permission/headless.ts, command/template/initialize.txt}`.
 - Upstream opencode (dev): `packages/opencode/src/{tool/skill.ts, permission/index.ts}` (the `permission.ask` non-call finding).
 - Kilo docs (7.x-current): platforms/cli, cli-reference, vscode/whats-new, customize/{custom-modes, workflows, skills, agents-md, agent-permissions, custom-rules}, automate/extending/plugins.
-- Upstream Throughliner: `/tmp/throughliner-upstream` @ `743aa63` (vendored to `vendor/throughliner/`, manifest-verified); vendored `hooks/hooks.json` and the four Python hooks' I/O (grep-verified this session).
-- Reference port: `/home/oc/reports/throughliner` (omp; strategy + fail-open invariant + payload-test method).
+- Upstream Throughliner: pinned at `743aa63` (v1.21.1; vendored to `vendor/throughliner/`, manifest-verified); vendored `hooks/hooks.json` and the four Python hooks' I/O (grep-verified this session).
+- Reference port: the omp port, published on the fork's `main` branch (strategy + fail-open invariant + payload-test method).

@@ -453,7 +453,12 @@ export default function throughlinerPlugin(input: PluginInputLike) {
       if (!_input.sessionID) return;
       const ctx = await sessionStart(_input.sessionID, cwdOf());
       if (ctx) {
-        output.system.push(`[Throughliner session orientation — injected once per session by the session_start hook]\n${ctx}`);
+        // The vendored hooks name per-session working files _build-<id>.md
+        // from the hook payload's session_id; Claude Code shows the model its
+        // session id natively, this host does not, so the shim says it.
+        const safeId = _input.sessionID.replace(/[^A-Za-z0-9._-]/g, "_");
+        const idNote = `Session ID for this session: ${safeId} — per-session working files are named with it, exactly _build-${safeId}.md (and _freeform-${safeId}.md for freeform work).`;
+        output.system.push(`[Throughliner session orientation — injected once per session by the session_start hook]\n${ctx}\n${idNote}`);
       }
     },
   });

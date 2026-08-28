@@ -118,6 +118,10 @@ test("system.transform injects brevity (always) and session orientation (once st
   assert.ok(joined.includes("base system prompt"), "base system preserved");
   assert.match(joined, /Throughliner output style/, "brevity section present");
   assert.match(joined, /session orientation/i, "session orientation present");
+  // The model cannot know the harness session id natively, so the shim says
+  // it — the vendored hooks name per-session files from it.
+  assert.match(joined, /Session ID for this session: test-sid/, "session id stated");
+  assert.match(joined, /_build-test-sid\.md/, "build file name spelled out");
   // A second transform call gets a FRESH array (the host rebuilds system per
   // LLM call) — appending per call is idempotent, never cumulative.
   const again = { system: ["base system prompt"] };

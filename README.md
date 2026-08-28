@@ -62,6 +62,11 @@ exactly as upstream intends:
 | `/rescan` | Re-read project state into the session context                 |
 | `/done`   | Close out the build: file results, commit, queue updates       |
 
+**Headless automation note:** `kilo run` inherits opencode's stdin handling —
+a non-TTY *open* stdin is treated as piped input and waited on (verified on
+opencode 1.18.x, the shared CLI). When scripting runs, redirect stdin:
+`kilo run … < /dev/null`.
+
 ## What the shim enforces
 
 All decisions come from the vendored Python hooks; the shim only translates

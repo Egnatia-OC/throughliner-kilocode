@@ -1,0 +1,28 @@
+// Throughliner for Kilo Code — project config template.
+//
+// Place at the PROJECT ROOT as `kilo.jsonc` (Kilo walks up from cwd to the
+// project root looking for kilo.json / kilo.jsonc / opencode.jsonc /
+// opencode.json). Merge into an existing file if you have one — the plugin
+// line and the permission block are the only Throughliner requirements.
+//
+// Replace /path/to/throughliner-kilocode with where this repo lives on disk.
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "plugin": ["/path/to/throughliner-kilocode/kilo/plugin.ts"],
+  "permission": {
+    // Subagent cost gate: every `task` (subagent) spawn prompts interactively
+    // and auto-approves under `kilo run --auto`. Upstream Throughliner treats
+    // subagents as a cost the user consciously pays; this is that gate.
+    "task": "ask",
+    // Model-initiated loads of the five method skills require a user
+    // confirmation. Upstream intent is that the five commands are yours to
+    // type; user slash invocations (/setup ...) are never prompted.
+    "skill": {
+      "setup": "ask",
+      "plan": "ask",
+      "next": "ask",
+      "rescan": "ask",
+      "done": "ask"
+    }
+  }
+}

@@ -87,6 +87,22 @@ function trace(cwd: string, sid: string | undefined, entry: Record<string, unkno
     // tracing must never affect the session
   }
 }
+
+// The vendored scope-lock matches per-session working-file names
+// (_build-<id>.md / _freeform-<id>.md) against a LOWERCASE-ONLY shape —
+// pre_tool_use.py: ^_(build|freeform)-[a-z0-9._-]+\.md$ — and decides
+// "build vs planning" by whether the file named from the hook payload's
+// session_id exists. Harness session ids on this host are mixed-case
+// (opencode/kilo "ses_..." base62), so passing the raw id deadlocks /next's
+// bootstrap: the first write — creating the session's own _build-<id>.md —
+// is denied as planning mode, and the session can never reach build mode
+// (observed live in a smoke run; the model read the hook source and filed a
+// queue item about it). Every hook payload therefore carries the lowercased
+// id, and the session-orientation note tells the model the same lowercased
+// name. The harness's own client calls keep the raw id.
+function hookSid(sid: string): string {
+  return sid.toLowerCase();
+}
 // ---------------------------------------------------------------------------
 // Hook runner: spawn the vendored Python, feed Claude-protocol JSON, parse
 // the JSON reply. Fail-open on every failure mode.
@@ -264,7 +280,7 @@ export default function throughlinerPlugin(input: PluginInputLike) {
   function sessionStart(sid: string, cwd: string): Promise<string | null> {
     let p = startContext.get(sid);
     if (!p) {
-      p = runHook("session_start.py", { cwd, session_id: sid }, 60_000).then((out) => {
+      p = runHook("session_start.py", { cwd, session_id: hookSid(sid) }, 60_000).then((out) => {
         let ctx = out?.hookSpecificOutput?.additionalContext ?? null;
         // One-shot safety net: a previous `kilo run` may have died before its
         // stop-block continuation was processed. Surface the pending claim to
@@ -326,7 +342,7 @@ export default function throughlinerPlugin(input: PluginInputLike) {
       .join("\n")
       .trim();
     if (!text) return;
-    const out = await runHook("stop.py", { last_assistant_message: text, cwd, session_id: sid }, 30_000);
+    const out = await runHook("stop.py", { last_assistant_message: text, cwd, session_id: hookSid(sid) }, 30_000);
     if (out?.decision !== "block" || !out.reason) return;
     const count = (stopBlocks.get(sid) ?? 0) + 1;
     if (count > 2) {
@@ -367,7 +383,7 @@ export default function throughlinerPlugin(input: PluginInputLike) {
         const cwd = cwdOf();
         const payload = {
           cwd,
-          session_id: _input.sessionID,
+          session_id: hookSid(_input.sessionID),
           tool_name: claudeName,
           tool_input: claudeToolInput(_input.tool, output.args ?? {}, cwd),
         };
@@ -405,7 +421,7 @@ export default function throughlinerPlugin(input: PluginInputLike) {
         const cwd = cwdOf();
         const payload = {
           cwd,
-          session_id: _input.sessionID,
+          session_id: hookSid(_input.sessionID),
           tool_name: claudeName,
           tool_input: claudeToolInput(_input.tool, _input.args ?? {}, cwd),
         };
@@ -455,8 +471,10 @@ export default function throughlinerPlugin(input: PluginInputLike) {
       if (ctx) {
         // The vendored hooks name per-session working files _build-<id>.md
         // from the hook payload's session_id; Claude Code shows the model its
-        // session id natively, this host does not, so the shim says it.
-        const safeId = _input.sessionID.replace(/[^A-Za-z0-9._-]/g, "_");
+        // session id natively, this host does not, so the shim says it. The id
+        // is lowercased (hookSid) to match the lowercase-only working-file
+        // shape the vendored scope-lock accepts — see hookSid.
+        const safeId = hookSid(_input.sessionID).replace(/[^a-z0-9._-]/g, "_");
         const idNote = `Session ID for this session: ${safeId} — per-session working files are named with it, exactly _build-${safeId}.md (and _freeform-${safeId}.md for freeform work).`;
         output.system.push(`[Throughliner session orientation — injected once per session by the session_start hook]\n${ctx}\n${idNote}`);
       }

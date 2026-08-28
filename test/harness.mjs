@@ -163,6 +163,40 @@ test("scope-lock: the session's own build working file is always editable", T, a
   );
 });
 
+test("bootstrap: a mixed-case session id can create its build working file and enter build mode", T, async () => {
+  // Harness ids on this host are mixed-case (ses_... base62). The shim must
+  // pass the hooks a lowercased id and tell the model the lowercased name, or
+  // /next's very first write — creating _build-<id>.md — is denied (the
+  // vendored quiet list is lowercase-only) and the session never reaches
+  // build mode. Observed live: the model read the hook source and filed a
+  // queue item about the deadlock.
+  const dir = makeProject({ buildFiles: null });
+  const { hooks } = await makePlugin(dir);
+  // /next step 2: create the build working file under the LOWERCASED name
+  // the orientation note shows the model.
+  await hooks["tool.execute.before"](
+    { tool: "write", sessionID: "Ses_AbC123", callID: "cb1" },
+    { args: { filePath: path.join(dir, "_build-ses_abc123.md"), content: "# Active Build\n\nFiles:\n- src/app.py\n" } },
+  );
+  // The hook allows the bootstrap; the tool then performs the write.
+  writeFileSync(path.join(dir, "_build-ses_abc123.md"), "# Active Build\n\nFiles:\n- src/app.py\n");
+  // The session now runs in BUILD mode (the hook finds the file named from
+  // its own payload id): a write to a listed file passes.
+  await hooks["tool.execute.before"](
+    { tool: "write", sessionID: "Ses_AbC123", callID: "cb2" },
+    { args: { filePath: path.join(dir, "src", "app.py"), content: "print('v2')" } },
+  );
+  // And the raw-case name never passes — the model must use the name from
+  // the orientation note.
+  await assert.rejects(
+    hooks["tool.execute.before"](
+      { tool: "write", sessionID: "Ses_AbC123", callID: "cb3" },
+      { args: { filePath: path.join(dir, "_build-Ses_AbC123.md"), content: "x" } },
+    ),
+    /BLOCKED/,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // 5. Git guard
 // ---------------------------------------------------------------------------

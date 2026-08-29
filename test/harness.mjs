@@ -121,6 +121,9 @@ test("system.transform injects brevity (always) and session orientation (once st
   // The model cannot know the harness session id natively, so the shim says
   // it — the vendored hooks name per-session files from it.
   assert.match(joined, /Session ID for this session: test-sid/, "session id stated");
+  // The port ships the mechanical half of the rule gate (upstream's checker
+  // is path-specific to their repo); the orientation must point at it.
+  assert.ok(joined.includes("rule_corpus_check.py"), "orientation points at the rule corpus checker");
   assert.match(joined, /_build-test-sid\.md/, "build file name spelled out");
   // A second transform call gets a FRESH array (the host rebuilds system per
   // LLM call) — appending per call is idempotent, never cumulative.

@@ -476,7 +476,19 @@ export default function throughlinerPlugin(input: PluginInputLike) {
         // shape the vendored scope-lock accepts — see hookSid.
         const safeId = hookSid(_input.sessionID).replace(/[^a-z0-9._-]/g, "_");
         const idNote = `Session ID for this session: ${safeId} — per-session working files are named with it, exactly _build-${safeId}.md (and _freeform-${safeId}.md for freeform work).`;
-        output.system.push(`[Throughliner session orientation — injected once per session by the session_start hook]\n${ctx}\n${idNote}`);
+        // The rule gate the method ships is judgment (a `Rule gate:` disposition
+        // at close); upstream pairs it with a mechanical corpus check that is
+        // path-specific to their repo. This port ships a layout-agnostic one —
+        // point the session at it so a rule-gate pass can run the checks.
+        let portNote = "";
+        const ruleCheck = path.join(
+          path.dirname(path.dirname(VENDOR_ROOT as string)),
+          "kilo", "scripts", "rule_corpus_check.py",
+        );
+        if (existsSync(ruleCheck)) {
+          portNote = `\nRule corpus check (mechanical half of the rule gate): python3 ${ruleCheck} <project-dir> — run once the project's own instructions require rule-gate dispositions and the records deserve a mechanical pass.`;
+        }
+        output.system.push(`[Throughliner session orientation — injected once per session by the session_start hook]\n${ctx}\n${idNote}${portNote}`);
       }
     },
   });

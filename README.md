@@ -47,6 +47,8 @@ model-agnostic and makes no model choice.
      it the plugin disables itself and logs one line), and
    - materializes the five method skills into `~/.kilocode/skills/<name>/SKILL.md`,
      rewriting `${CLAUDE_PLUGIN_ROOT}` to the real vendor path (idempotent).
+     **A same-named skill of your own in that directory is overwritten on
+     every plugin load** — rename yours if you have one.
 
 ## The five commands
 
@@ -147,6 +149,11 @@ consistency, not rule quality; that stays with the judgment gate.
 
 - `KILO_PURE=1` in your environment disables external plugins — the port
   silently becomes inert (skills still load; hooks don).
+- The shim and the hooks write session state under `<project>/.throughliner/`
+  (shim traces, editing markers, the pending-continuation file). Keep it out
+  of the project repository: the method's `/setup` adds it to `.gitignore`
+  automatically; add the line by hand if you run the hooks without the
+  method's docs.
 - Kilo telemetry is your choice; the port does not touch it.
 - If your project defines `.kilo/commands/<name>.md` for any of the five
   names, the command shadows the skill (registry order).
@@ -175,9 +182,9 @@ platform mapping, source-verified).
 
 ```sh
 npm install
-npx tsc -p .test/tsconfig.check.json
+npm run typecheck
 npx esbuild kilo/plugin.ts --bundle --format=esm --platform=node --outfile=.test/plugin.mjs
-node --test test/harness.mjs   # 19 tests, ~10s
+node --test test/harness.mjs   # 21 tests, ~15s
 python3 test/rule_corpus_check.py   # 6 tests, throwaway git projects
 ```
 

@@ -9,7 +9,8 @@
  * Event shapes are the REAL bus shapes (kilo 7.4.23 binary-verified; Kilo is
  * an OpenCode fork with identical dispatch):
  *   server dispatch: hook["event"]({ event: { id, type, properties: <bus data> } })
- *   session.created / session.idle:  properties { sessionID, ... }
+ *   session.created / session.deleted: properties { info: { id, directory, ... } }
+ *   session.idle:                    properties { sessionID }
  *   tool.execute.after:              input { tool, sessionID, callID, args },
  *                                    output = tool result { title, output: string, metadata }
  *
@@ -91,11 +92,6 @@ async function makePlugin(dir, state) {
   return { hooks: await throughliner(input), state };
 }
 
-async function waitForPermission(state, ms = 5_000) {
-  const t0 = Date.now();
-  while (state.permissions.length === 0 && Date.now() - t0 < ms) await sleep(50);
-}
-
 async function waitForPrompts(state, n, ms = 10_000) {
   const t0 = Date.now();
   while (state.prompts.length < n && Date.now() - t0 < ms) await sleep(100);
@@ -133,12 +129,33 @@ test("system.transform injects brevity (always) and session orientation (once st
 });
 
 // ---------------------------------------------------------------------------
+// 1b. session.created: the session's own directory, not the plugin's
+// ---------------------------------------------------------------------------
+
+test("session.created: orientation runs in the session's directory (info.directory)", T, async () => {
+  const pluginDir = makeProject();
+  const sessionDir = makeProject();
+  const { hooks } = await makePlugin(pluginDir);
+  // A pending claim lives in the SESSION's directory, not the plugin's —
+  // session_start must run there to see it (the one-shot safety net).
+  mkdirSync(path.join(sessionDir, ".throughliner"), { recursive: true });
+  writeFileSync(path.join(sessionDir, ".throughliner", "pending-continuation.json"), "ship the v2 API");
+  await hooks.event(busEvent("session.created", { info: { id: "test-sid", directory: sessionDir } }));
+  const output = { system: ["base"] };
+  await hooks["experimental.chat.system.transform"]({ sessionID: "test-sid" }, output);
+  const joined = output.system.join("\n");
+  assert.match(joined, /previous session ended claiming: ship the v2 API/, "orientation ran in the session's directory");
+  assert.ok(!existsSync(path.join(sessionDir, ".throughliner", "pending-continuation.json")), "pending-continuation marker consumed");
+});
+
+// ---------------------------------------------------------------------------
 // 2-4. Scope-lock (build working file Files: list)
 // ---------------------------------------------------------------------------
 
 test("scope-lock: write to a file OUTSIDE the build's Files: list is denied", T, async () => {
   const dir = makeProject({ buildFiles: ["src/app.py"] });
   const { hooks } = await makePlugin(dir);
+
   await assert.rejects(
     hooks["tool.execute.before"](
       { tool: "write", sessionID: "test-sid", callID: "c1" },
@@ -320,6 +337,18 @@ test("stop: a claim whose slug IS in QUEUE.md does not block", T, async () => {
   await hooks.event(busEvent("session.idle", { sessionID: "test-sid" }));
   await sleep(3_000);
   assert.equal(state.prompts.length, 0, "no continuation for a real filing");
+});
+
+test("stop: the cap is checked synchronously — concurrent idles cannot exceed it", T, async () => {
+  const dir = makeProject();
+  const { hooks, state } = await makePlugin(dir, idleState("Done. I filed [ghost-slug] to the queue."));
+  // Four idles at once: the vendored per-claim marker usually stops at most
+  // one of them, but the shim's own cap (2) must hold regardless — a
+  // check-then-set straddling awaits lets every racer past the cap.
+  await Promise.all([1, 2, 3, 4].map(() => hooks.event(busEvent("session.idle", { sessionID: "test-sid" }))));
+  await waitForPrompts(state, 2, 6_000);
+  await sleep(1_500);
+  assert.ok(state.prompts.length <= 2, `at most 2 continuation prompts (got ${state.prompts.length})`);
 });
 
 // ---------------------------------------------------------------------------

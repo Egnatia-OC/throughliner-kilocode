@@ -200,7 +200,7 @@ function claudeToolName(tool: string): string | null {
     case "write":
       return "Write";
     case "edit":
-      return "MultiEdit";
+      return "Edit";
     case "bash":
       return "Bash";
     case "task":
@@ -275,7 +275,11 @@ export default function throughlinerPlugin(input: PluginInputLike) {
   materializeSkills();
 
   const startContext = new Map<string, Promise<string | null>>();
+  // Per-session stop-loop state: stopBlocks = continuation prompts already
+  // sent; stopClaims = stop.py checks in flight. The cap (2) is checked and
+  // claimed synchronously — see onStopIdle.
   const stopBlocks = new Map<string, number>();
+  const stopClaims = new Map<string, number>();
 
   function sessionStart(sid: string, cwd: string): Promise<string | null> {
     let p = startContext.get(sid);
@@ -324,6 +328,23 @@ export default function throughlinerPlugin(input: PluginInputLike) {
   }
 
   async function onStopIdle(sid: string): Promise<void> {
+    // The cap check and claim are synchronous, BEFORE any await: two rapid
+    // session.idle events interleave at the awaits below, and a check-then-set
+    // straddling an await lets every racer past the cap (each reads the
+    // counter before any of them sets it). sent + in-flight >= 2 means the cap
+    // holds even if every in-flight check ends up blocking.
+    const sent = stopBlocks.get(sid) ?? 0;
+    const inflight = stopClaims.get(sid) ?? 0;
+    if (sent + inflight >= 2) {
+      log(`stop-block cap (2) reached for ${sid} — stopping the loop`);
+      return;
+    }
+    stopClaims.set(sid, inflight + 1);
+    const releaseClaim = () => {
+      const left = (stopClaims.get(sid) ?? 1) - 1;
+      if (left <= 0) stopClaims.delete(sid);
+      else stopClaims.set(sid, left);
+    };
     const cwd = cwdOf();
     let messages: Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }> = [];
     try {
@@ -331,25 +352,29 @@ export default function throughlinerPlugin(input: PluginInputLike) {
       messages = (res?.data ?? []) as typeof messages;
     } catch (err) {
       log(`stop: message fetch failed: ${String(err)}`);
+      releaseClaim();
       return;
     }
     const assistant = messages.filter((m) => m.info?.role === "assistant");
     const last = assistant[assistant.length - 1];
-    if (!last) return;
+    if (!last) {
+      releaseClaim();
+      return;
+    }
     const text = (last.parts ?? [])
       .filter((p) => p.type === "text" && typeof p.text === "string")
       .map((p) => p.text as string)
       .join("\n")
       .trim();
-    if (!text) return;
-    const out = await runHook("stop.py", { last_assistant_message: text, cwd, session_id: hookSid(sid) }, 30_000);
-    if (out?.decision !== "block" || !out.reason) return;
-    const count = (stopBlocks.get(sid) ?? 0) + 1;
-    if (count > 2) {
-      log(`stop-block cap (2) reached for ${sid} — stopping the loop`);
+    if (!text) {
+      releaseClaim();
       return;
     }
-    stopBlocks.set(sid, count);
+    const out = await runHook("stop.py", { last_assistant_message: text, cwd, session_id: hookSid(sid) }, 30_000);
+    releaseClaim();
+    if (out?.decision !== "block" || !out.reason) return;
+    stopBlocks.set(sid, (stopBlocks.get(sid) ?? 0) + 1);
+    const blockNum = stopBlocks.get(sid) ?? 0;
     try {
       // One-shot safety net: if the CLI exits before the continuation is
       // processed, the NEXT session's session_start surfaces this claim.
@@ -361,11 +386,11 @@ export default function throughlinerPlugin(input: PluginInputLike) {
     }
     try {
       await input.client.session.prompt({ sessionID: sid, parts: [{ type: "text", text: out.reason }] });
-      log(`stop-block fired for ${sid} (block ${count}/2)`);
+      log(`stop-block fired for ${sid} (block ${blockNum}/2)`);
     } catch (err) {
       log(`stop-block re-prompt failed: ${String(err)}`);
     }
-    trace(cwd, sid, { hook: "stop", decision: "block", block: count });
+    trace(cwd, sid, { hook: "stop", decision: "block", block: blockNum });
   }
 
 
@@ -417,7 +442,7 @@ export default function throughlinerPlugin(input: PluginInputLike) {
       try {
         const claudeName = claudeToolName(_input.tool);
         if (!claudeName) return;
-        if (!["Write", "MultiEdit", "Bash"].includes(claudeName)) return;
+        if (!["Edit", "Write", "Bash"].includes(claudeName)) return;
         const cwd = cwdOf();
         const payload = {
           cwd,
@@ -439,18 +464,25 @@ export default function throughlinerPlugin(input: PluginInputLike) {
 
     // The server dispatches as hook["event"]({ event: { id, type, properties: <bus data> } })
     // — identical to OpenCode's dispatch (kilo 7.4.23 binary, verified).
+    // Event property shapes (ANALYSIS.md §4.3, verbatim SDK types):
+    //   session.created / session.deleted:  properties { info: Session }
+    //   session.idle:                       properties { sessionID }
     async event(input: {
-      event?: { type?: string; properties?: { sessionID?: string; [k: string]: unknown }; [k: string]: unknown };
+      event?: { type?: string; properties?: { sessionID?: string; info?: { id?: string; directory?: string }; [k: string]: unknown }; [k: string]: unknown };
     }): Promise<void> {
       const event = input.event;
       if (!event) return;
-      const sid = event.properties?.sessionID;
+      const props = event.properties ?? {};
+      const sid = event.type === "session.idle" ? props.sessionID : (props.info?.id ?? props.sessionID);
       if (!sid) return;
       if (event.type === "session.created") {
-        void sessionStart(sid, cwdOf());
+        // The session's own directory, not the plugin's: a worktree or
+        // multi-root session starts in its own folder (ANALYSIS.md §3 row 4).
+        void sessionStart(sid, props.info?.directory || cwdOf());
       } else if (event.type === "session.deleted") {
         startContext.delete(sid);
         stopBlocks.delete(sid);
+        stopClaims.delete(sid);
       } else if (event.type === "session.idle") {
         void onStopIdle(sid);
       }

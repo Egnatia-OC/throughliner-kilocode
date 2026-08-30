@@ -5,11 +5,12 @@
   "description": "Throughliner workflow plugin ported to Kilo Code. Vendored pristine upstream v1.21.1 + a thin hook-translation plugin.",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p .test/tsconfig.check.json",
+    "typecheck": "tsc -p tsconfig.check.json",
     "test": "node --test test/harness.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.2"
   }
 }

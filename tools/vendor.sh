@@ -18,14 +18,17 @@ SRC="$UPSTREAM/plugin/throughliner"
 DEST="$PROJ/vendor/throughliner"
 
 mkdir -p "$DEST"
-# copy the pristine plugin tree, nothing else
-(cd "$SRC" && find . -type f | sed 's|^\./||' | while IFS= read -r f; do
+# copy the pristine plugin tree, nothing else. __pycache__ is excluded: a
+# bytecode file generated on the vendoring machine would be an unmanifested
+# extra inside the "byte-identical" tree, and the manifest below must match
+# the copy exactly.
+(cd "$SRC" && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sed 's|^\./||' | while IFS= read -r f; do
   mkdir -p "$DEST/$(dirname "$f")"
   cp -- "$SRC/$f" "$DEST/$f"
 done)
 
 # manifest: relative path + sha256, sorted
-( cd "$DEST" && find . -type f | sed 's|^\./||' | sort | xargs sha256sum ) > "$PROJ/vendor/MANIFEST.sha256"
+( cd "$DEST" && find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' | sed 's|^\./||' | sort | xargs sha256sum ) > "$PROJ/vendor/MANIFEST.sha256"
 
 # verify
 ( cd "$DEST" && sha256sum -c "$PROJ/vendor/MANIFEST.sha256" --quiet )
